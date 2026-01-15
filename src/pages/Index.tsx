@@ -1,12 +1,30 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import HomeScreen from "@/components/HomeScreen";
+import WorkoutEditor from "@/components/WorkoutEditor";
+import TrainingPlayer from "@/components/TrainingPlayer";
+
+type Screen = "home" | "editor" | "player";
 
 const Index = () => {
+  const [currentScreen, setCurrentScreen] = useState<Screen>("home");
+  const [activeWorkoutId, setActiveWorkoutId] = useState<string | undefined>();
+
+  const handleNavigate = (screen: Screen, workoutId?: string) => {
+    setCurrentScreen(screen);
+    setActiveWorkoutId(workoutId);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen">
+      {currentScreen === "home" && (
+        <HomeScreen onNavigate={handleNavigate} />
+      )}
+      {currentScreen === "editor" && (
+        <WorkoutEditor workoutId={activeWorkoutId} onNavigate={handleNavigate} />
+      )}
+      {currentScreen === "player" && activeWorkoutId && (
+        <TrainingPlayer workoutId={activeWorkoutId} onNavigate={handleNavigate} />
+      )}
     </div>
   );
 };
