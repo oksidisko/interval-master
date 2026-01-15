@@ -128,7 +128,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       </main>
 
       {/* Fixed Bottom Actions */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 safe-bottom glass">
+      <div className="fixed bottom-0 left-0 right-0 p-4 safe-bottom bg-background/95 backdrop-blur-sm border-t border-border/50">
         <div className="flex gap-3">
           <button className="flex-1 h-14 bg-work/20 text-work border border-work/30 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             <Plus className="w-5 h-5" />
