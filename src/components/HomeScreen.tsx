@@ -73,7 +73,7 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
       </main>
 
       {/* Fixed Bottom Action */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 safe-bottom glass">
+      <div className="fixed bottom-0 left-0 right-0 p-4 safe-bottom bg-background/95 backdrop-blur-sm border-t border-border/50">
         <button
           onClick={() => onNavigate("editor")}
           className="w-full h-16 bg-primary text-primary-foreground rounded-2xl text-lg font-bold active:scale-[0.98] transition-transform"
