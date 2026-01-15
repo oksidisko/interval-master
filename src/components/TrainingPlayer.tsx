@@ -77,7 +77,7 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col state-transition no-select ${getStateStyles()}`}>
+    <div className={`dark min-h-screen flex flex-col state-transition no-select ${getStateStyles()}`}>
       {/* Header */}
       <header className="safe-top px-4 pt-4 pb-2 flex items-center justify-between">
         <button
