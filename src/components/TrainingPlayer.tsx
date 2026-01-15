@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, SkipBack, Play, Pause, SkipForward } from "lucide-react";
+import { X, SkipBack, Play, Pause, SkipForward, ChevronLeft, ChevronRight } from "lucide-react";
 
 type TimerState = "prepare" | "work" | "rest";
 
@@ -8,9 +8,12 @@ interface TrainingPlayerProps {
   onNavigate: (screen: "home" | "editor" | "player", workoutId?: string) => void;
 }
 
+const states: TimerState[] = ["prepare", "work", "rest"];
+
 const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentState, setCurrentState] = useState<TimerState>("prepare");
+  const [stateIndex, setStateIndex] = useState(0);
+  const currentState = states[stateIndex];
 
   // Mock data for display
   const mockData = {
@@ -39,21 +42,22 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
 
   const data = mockData[currentState];
 
-  // Cycle through states for demo
-  const cycleState = () => {
-    const states: TimerState[] = ["prepare", "work", "rest"];
-    const currentIndex = states.indexOf(currentState);
-    setCurrentState(states[(currentIndex + 1) % states.length]);
+  const goToPrev = () => {
+    setStateIndex((prev) => (prev - 1 + states.length) % states.length);
+  };
+
+  const goToNext = () => {
+    setStateIndex((prev) => (prev + 1) % states.length);
   };
 
   const getStateStyles = () => {
     switch (currentState) {
       case "work":
-        return "bg-work";
+        return "bg-work"; // Red
       case "rest":
-        return "bg-rest";
+        return "bg-rest"; // Green
       case "prepare":
-        return "bg-prepare";
+        return "bg-prepare"; // Yellow
     }
   };
 
@@ -61,18 +65,23 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
     return currentState === "prepare" ? "text-prepare-foreground" : "text-foreground";
   };
 
+  const getStateLabel = () => {
+    switch (currentState) {
+      case "work":
+        return "WORK";
+      case "rest":
+        return "REST";
+      case "prepare":
+        return "PREPARE";
+    }
+  };
+
   return (
-    <div
-      className={`min-h-screen flex flex-col state-transition no-select ${getStateStyles()}`}
-      onClick={cycleState}
-    >
+    <div className={`min-h-screen flex flex-col state-transition no-select ${getStateStyles()}`}>
       {/* Header */}
       <header className="safe-top px-4 pt-4 pb-2 flex items-center justify-between">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onNavigate("home");
-          }}
+          onClick={() => onNavigate("home")}
           className={`w-12 h-12 rounded-full bg-black/20 flex items-center justify-center active:scale-95 transition-transform ${getTextColor()}`}
           aria-label="Exit workout"
         >
@@ -84,11 +93,16 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
           <p className="text-xs opacity-60">Round {data.round}</p>
         </div>
 
-        <div className="w-12 h-12" /> {/* Spacer for alignment */}
+        <div className="w-12 h-12" />
       </header>
 
+      {/* State Indicator */}
+      <div className={`mx-4 mt-2 px-4 py-2 rounded-xl bg-black/15 text-center ${getTextColor()}`}>
+        <p className="text-2xl font-black tracking-wider">{getStateLabel()}</p>
+      </div>
+
       {/* Next Up Preview */}
-      <div className={`mx-4 mt-2 px-4 py-3 rounded-xl bg-black/15 ${getTextColor()}`}>
+      <div className={`mx-4 mt-3 px-4 py-3 rounded-xl bg-black/15 ${getTextColor()}`}>
         <p className="text-xs uppercase tracking-wider opacity-70">Next Up</p>
         <div className="flex items-baseline justify-between mt-0.5">
           <p className="text-lg font-semibold">{data.next}</p>
@@ -106,24 +120,49 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
         </p>
       </main>
 
+      {/* State Navigation */}
+      <div className={`mx-4 mb-4 flex items-center justify-between ${getTextColor()}`}>
+        <button
+          onClick={goToPrev}
+          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform"
+        >
+          <ChevronLeft className="w-5 h-5" />
+          <span className="font-semibold">Prev</span>
+        </button>
+
+        <div className="flex gap-2">
+          {states.map((state, idx) => (
+            <div
+              key={state}
+              className={`w-2.5 h-2.5 rounded-full transition-all ${
+                idx === stateIndex ? "bg-white scale-125" : "bg-white/40"
+              }`}
+            />
+          ))}
+        </div>
+
+        <button
+          onClick={goToNext}
+          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform"
+        >
+          <span className="font-semibold">Next</span>
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+
       {/* Bottom Controls */}
       <div className="px-4 pb-4 safe-bottom">
         <div className="flex items-center justify-center gap-4">
-          {/* Skip Back */}
           <button
-            onClick={(e) => e.stopPropagation()}
+            onClick={goToPrev}
             className={`w-16 h-16 rounded-full bg-black/20 flex items-center justify-center active:scale-95 transition-transform ${getTextColor()}`}
             aria-label="Skip to previous interval"
           >
             <SkipBack className="w-7 h-7 fill-current" />
           </button>
 
-          {/* Play/Pause - Largest button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsPlaying(!isPlaying);
-            }}
+            onClick={() => setIsPlaying(!isPlaying)}
             className={`w-24 h-24 rounded-full bg-black/30 flex items-center justify-center active:scale-95 transition-transform shadow-2xl ${getTextColor()}`}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
@@ -134,20 +173,14 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
             )}
           </button>
 
-          {/* Skip Forward */}
           <button
-            onClick={(e) => e.stopPropagation()}
+            onClick={goToNext}
             className={`w-16 h-16 rounded-full bg-black/20 flex items-center justify-center active:scale-95 transition-transform ${getTextColor()}`}
             aria-label="Skip to next interval"
           >
             <SkipForward className="w-7 h-7 fill-current" />
           </button>
         </div>
-
-        {/* Tap hint */}
-        <p className={`text-center text-xs mt-4 opacity-50 ${getTextColor()}`}>
-          Tap anywhere to preview states
-        </p>
       </div>
     </div>
   );
