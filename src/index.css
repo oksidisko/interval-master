@@ -42,10 +42,10 @@
 
     --radius: 1rem;
 
-    /* Interval State Colors - Softened for friendliness */
-    --work: 142 71% 45%;
+    /* Interval State Colors - Work=Red, Rest=Green */
+    --work: 0 84% 60%;
     --work-foreground: 0 0% 100%;
-    --rest: 0 84% 60%;
+    --rest: 142 71% 45%;
     --rest-foreground: 0 0% 100%;
     --prepare: 45 93% 47%;
     --prepare-foreground: 0 0% 0%;
