@@ -11,7 +11,8 @@ import {
   DndContext,
   closestCenter,
   KeyboardSensor,
-  PointerSensor,
+  TouchSensor,
+  MouseSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -145,9 +146,15 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   const isNew = !workoutId;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px movement before drag starts
+        delay: 250,        // 250ms press-and-hold before drag starts
+        tolerance: 5,      // Allow 5px movement during the delay
+      },
+    }),
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8,       // Require 8px movement before drag starts
       },
     }),
     useSensor(KeyboardSensor, {
@@ -466,7 +473,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
             <Button type="button" variant="outline" onClick={handleCancelEditDialog}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleSaveEditedBlock}>
+            <Button type="button" variant="dialog" onClick={handleSaveEditedBlock}>
               Save Changes
             </Button>
           </DialogFooter>
@@ -534,7 +541,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
           </div>
 
           <DialogFooter>
-            <Button type="button" onClick={handleSaveSettings}>
+            <Button type="button" variant="dialog" onClick={handleSaveSettings}>
               Done
             </Button>
           </DialogFooter>
@@ -560,10 +567,10 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
           </button>
         </div>
         <button
-          onClick={() => onNavigate("player", workout.id)}
+          onClick={() => onNavigate("home")}
           className="w-full h-14 mt-3 bg-primary text-primary-foreground rounded-xl text-lg font-bold active:scale-[0.98] transition-transform"
         >
-          Start Workout
+          Save
         </button>
       </div>
     </div>

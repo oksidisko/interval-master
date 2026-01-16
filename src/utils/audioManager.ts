@@ -8,6 +8,8 @@
 export class AudioManager {
   private audioContext: AudioContext | null = null;
   private initialized = false;
+  private voices: SpeechSynthesisVoice[] = [];
+  private voicesLoaded = false;
 
   /**
    * Initialize AudioContext on user gesture (Play button)
@@ -25,6 +27,9 @@ export class AudioManager {
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
       }
+
+      // Load speech synthesis voices
+      this.loadVoices();
 
       this.initialized = true;
       return true;
@@ -83,14 +88,127 @@ export class AudioManager {
   }
 
   /**
-   * Cleanup AudioContext
+   * Load available speech synthesis voices
+   * Handles async voice loading in Chrome/Edge
+   */
+  private loadVoices(): void {
+    const loadVoicesList = () => {
+      if ('speechSynthesis' in window) {
+        this.voices = window.speechSynthesis.getVoices();
+        this.voicesLoaded = this.voices.length > 0;
+      }
+    };
+
+    loadVoicesList();
+
+    // Chrome/Edge load voices asynchronously
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoicesList;
+    }
+  }
+
+  /**
+   * Detect language from text (Russian vs English)
+   * @param text - Text to analyze
+   * @returns Language code ('ru-RU' or 'en-US')
+   */
+  private detectLanguage(text: string): 'ru-RU' | 'en-US' {
+    return /[а-яА-ЯёЁ]/.test(text) ? 'ru-RU' : 'en-US';
+  }
+
+  /**
+   * Select best available voice for language
+   * Prioritizes Premium/Enhanced voices, then Natural, then any match
+   * @param lang - Language code (e.g., 'ru-RU', 'en-US')
+   * @returns Selected voice or null for browser default
+   */
+  private selectVoice(lang: string): SpeechSynthesisVoice | null {
+    const langPrefix = lang.slice(0, 2); // 'ru' or 'en'
+    const matchingVoices = this.voices.filter(v => v.lang.startsWith(langPrefix));
+
+    if (matchingVoices.length === 0) return null;
+
+    // Try Premium/Enhanced voices first
+    const premium = matchingVoices.find(v =>
+      v.name.includes('Premium') || v.name.includes('Enhanced')
+    );
+    if (premium) return premium;
+
+    // Try Natural voices
+    const natural = matchingVoices.find(v => v.name.includes('Natural'));
+    if (natural) return natural;
+
+    // Return first matching voice
+    return matchingVoices[0];
+  }
+
+  /**
+   * Announce next block title with text-to-speech
+   * @param title - Block title to announce (e.g., "Push-ups", "Отжимания")
+   */
+  public announceNextBlock(title: string): void {
+    // Check if speech synthesis is supported
+    if (!('speechSynthesis' in window)) {
+      return;
+    }
+
+    try {
+      // Detect language and build announcement text
+      const lang = this.detectLanguage(title);
+      const prefix = lang === 'ru-RU' ? 'Приготовьтесь к' : 'Get ready for';
+      const text = `${prefix} ${title}`;
+
+      // Create utterance
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang;
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.8;
+
+      // Select best voice if available
+      const voice = this.selectVoice(lang);
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      // Handle errors (e.g., Brave browser blocking)
+      utterance.onerror = (e) => {
+        if (e.error === 'synthesis-failed') {
+          console.warn('Speech synthesis blocked by browser. Enable in browser settings (Brave: disable shields).');
+        }
+      };
+
+      // Cancel any ongoing speech and speak
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      console.warn('Speech announcement failed:', error);
+    }
+  }
+
+  /**
+   * Cancel any ongoing speech
+   * Call when pausing or stopping workout
+   */
+  public cancelSpeech(): void {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }
+
+  /**
+   * Cleanup AudioContext and speech synthesis
    * Call this when component unmounts
    */
   public cleanup(): void {
+    this.cancelSpeech();
+
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
     }
     this.audioContext = null;
     this.initialized = false;
+    this.voices = [];
+    this.voicesLoaded = false;
   }
 }

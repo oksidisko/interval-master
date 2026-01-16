@@ -35,6 +35,7 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
   const visibilityManagerRef = useRef<VisibilityManager | null>(null);
   const audioManagerRef = useRef<AudioManager>(new AudioManager());
   const lastBeepSecondRef = useRef<number | null>(null);
+  const lastAnnouncementSecondRef = useRef<number | null>(null);
   const completionDurationRef = useRef<number>(0);
 
   useEffect(() => {
@@ -44,6 +45,7 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
   // Cleanup audio manager on unmount
   useEffect(() => {
     return () => {
+      audioManagerRef.current.cancelSpeech();
       audioManagerRef.current.cleanup();
     };
   }, []);
@@ -160,6 +162,17 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
         }
       }
 
+      // Announce next block at 10 seconds (or at start for short blocks)
+      if (nextBlock && remaining > 0) {
+        const isShortBlock = currentBlock.duration < 10;
+        const announceAt = isShortBlock ? Math.floor(currentBlock.duration) : 10;
+
+        if (remainingSeconds === announceAt && lastAnnouncementSecondRef.current !== announceAt) {
+          audioManagerRef.current.announceNextBlock(nextBlock.title);
+          lastAnnouncementSecondRef.current = announceAt;
+        }
+      }
+
       // Play longer beep at 0 (same tone, 3x longer)
       if (remaining > 0 && remainingSeconds === 0 && lastBeepSecondRef.current !== 0) {
         audioManagerRef.current.playTransitionBeep();
@@ -169,6 +182,7 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
       if (remaining <= 0) {
         // Don't play beep here since we already played it at remainingSeconds = 0
         lastBeepSecondRef.current = null; // Reset for next block
+        lastAnnouncementSecondRef.current = null; // Reset announcement tracker
 
         // Trigger haptic feedback on block transition
         vibrateTransition();
@@ -335,6 +349,9 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
               if (!isPlaying) {
                 // Initialize audio on first play (user gesture required)
                 await audioManagerRef.current.initialize();
+              } else {
+                // Cancel any ongoing speech when pausing
+                audioManagerRef.current.cancelSpeech();
               }
               setIsPlaying(!isPlaying);
             }}

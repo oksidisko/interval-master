@@ -70,6 +70,14 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        dialog: {
+          DEFAULT: "hsl(var(--dialog-background))",
+          foreground: "hsl(var(--dialog-foreground))",
+          border: "hsl(var(--dialog-border))",
+          accent: "hsl(var(--dialog-accent))",
+          primary: "hsl(var(--dialog-primary))",
+          ring: "hsl(var(--dialog-ring))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

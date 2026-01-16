@@ -50,6 +50,15 @@
     --prepare: 45 93% 47%;
     --prepare-foreground: 0 0% 0%;
 
+    /* Modal Dialog Blues */
+    --dialog-background: 210 40% 98%;
+    --dialog-foreground: 210 90% 25%;
+    --dialog-border: 210 50% 85%;
+    --dialog-accent: 210 60% 92%;
+    --dialog-primary: 210 75% 55%;
+    --dialog-primary-hover: 210 75% 48%;
+    --dialog-ring: 210 80% 60%;
+
     /* Sidebar (unused but required) */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 0 0% 9%;
@@ -80,6 +89,15 @@
     --border: 0 0% 15%;
     --input: 0 0% 15%;
     --ring: 0 0% 100%;
+
+    /* Dark mode dialog blues */
+    --dialog-background: 210 25% 12%;
+    --dialog-foreground: 210 40% 95%;
+    --dialog-border: 210 30% 20%;
+    --dialog-accent: 210 35% 18%;
+    --dialog-primary: 210 75% 55%;
+    --dialog-primary-hover: 210 75% 62%;
+    --dialog-ring: 210 80% 60%;
   }
 }
 
@@ -155,4 +173,34 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
+}
+
+/* Dialog component styling */
+.dialog-overlay {
+  background-color: rgba(33, 63, 99, 0.75);
+}
+
+.dark .dialog-overlay {
+  background-color: rgba(20, 38, 61, 0.85);
+}
+
+/* Dialog inputs and sliders */
+.dialog-content input[type="text"],
+.dialog-content input[type="number"] {
+  border-color: hsl(var(--dialog-border));
+  transition: border-color 200ms ease;
+}
+
+.dialog-content input:focus {
+  border-color: hsl(var(--dialog-primary));
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--dialog-ring) / 0.2);
+}
+
+.dialog-content [data-radix-slider-range] {
+  background-color: hsl(var(--dialog-primary));
+}
+
+.dialog-content [data-radix-slider-thumb] {
+  border-color: hsl(var(--dialog-primary));
 }
