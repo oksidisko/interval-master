@@ -1,72 +1,236 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, SkipBack, Play, Pause, SkipForward, ChevronLeft, ChevronRight } from "lucide-react";
+import { getWorkout } from "@/db/workouts";
+import type { Workout, Block } from "@/types/workout";
+import { VisibilityManager } from "@/utils/visibilityManager";
+import { vibrateTransition } from "@/utils/hapticFeedback";
+import { AudioManager } from "@/utils/audioManager";
+import WorkoutCompletionOverlay from "./WorkoutCompletionOverlay";
 
-type TimerState = "prepare" | "work" | "rest";
+type IntervalType = "prepare" | "work" | "rest";
+
+interface ExecutionBlock {
+  type: IntervalType;
+  title: string;
+  duration: number;
+  circle: number;
+}
 
 interface TrainingPlayerProps {
   workoutId: string;
   onNavigate: (screen: "home" | "editor" | "player", workoutId?: string) => void;
 }
 
-const states: TimerState[] = ["prepare", "work", "rest"];
-
 const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
+  const [workout, setWorkout] = useState<Workout | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [stateIndex, setStateIndex] = useState(0);
-  const currentState = states[stateIndex];
+  const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [executionSequence, setExecutionSequence] = useState<ExecutionBlock[]>([]);
+  const [showCompletion, setShowCompletion] = useState(false);
 
-  // Mock data for display
-  const mockData = {
-    prepare: {
-      time: "00:07",
-      label: "GET READY",
-      next: "Sprint",
-      nextDuration: "30s",
-      round: "1 of 3",
-    },
-    work: {
-      time: "00:24",
-      label: "SPRINT",
-      next: "Recovery",
-      nextDuration: "15s",
-      round: "1 of 3",
-    },
-    rest: {
-      time: "00:12",
-      label: "RECOVERY",
-      next: "Burpees",
-      nextDuration: "45s",
-      round: "1 of 3",
-    },
+  const startTimeRef = useRef<number | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const visibilityManagerRef = useRef<VisibilityManager | null>(null);
+  const audioManagerRef = useRef<AudioManager>(new AudioManager());
+  const lastBeepSecondRef = useRef<number | null>(null);
+  const completionDurationRef = useRef<number>(0);
+
+  useEffect(() => {
+    loadWorkout();
+  }, [workoutId]);
+
+  // Cleanup audio manager on unmount
+  useEffect(() => {
+    return () => {
+      audioManagerRef.current.cleanup();
+    };
+  }, []);
+
+  const loadWorkout = async () => {
+    try {
+      const data = await getWorkout(workoutId);
+      if (data) {
+        setWorkout(data);
+        const sequence = buildExecutionSequence(data);
+        setExecutionSequence(sequence);
+        setTimeRemaining(sequence[0]?.duration || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load workout:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const data = mockData[currentState];
+  const buildExecutionSequence = (workout: Workout): ExecutionBlock[] => {
+    const sequence: ExecutionBlock[] = [];
+
+    for (let circle = 1; circle <= workout.circles; circle++) {
+      if (circle === 1) {
+        sequence.push({
+          type: 'prepare',
+          title: 'Get Ready',
+          duration: workout.systemRestSec,
+          circle: 1
+        });
+      }
+
+      for (const block of workout.blocks) {
+        sequence.push({
+          type: block.type,
+          title: block.title,
+          duration: block.duration,
+          circle
+        });
+      }
+
+      if (circle < workout.circles) {
+        sequence.push({
+          type: 'prepare',
+          title: 'Rest Between Rounds',
+          duration: workout.systemRestSec,
+          circle: circle + 1
+        });
+      }
+    }
+
+    return sequence;
+  };
+
+  const currentBlock = executionSequence[currentBlockIndex];
+  const nextBlock = executionSequence[currentBlockIndex + 1];
 
   const goToPrev = () => {
-    setStateIndex((prev) => (prev - 1 + states.length) % states.length);
+    if (currentBlockIndex > 0) {
+      vibrateTransition();
+      setCurrentBlockIndex(prev => prev - 1);
+      setTimeRemaining(executionSequence[currentBlockIndex - 1].duration);
+      startTimeRef.current = null;
+    }
   };
 
   const goToNext = () => {
-    setStateIndex((prev) => (prev + 1) % states.length);
+    if (currentBlockIndex < executionSequence.length - 1) {
+      vibrateTransition();
+      setCurrentBlockIndex(prev => prev + 1);
+      setTimeRemaining(executionSequence[currentBlockIndex + 1].duration);
+      startTimeRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (!isPlaying || !currentBlock) {
+      // Cleanup visibility manager when not playing
+      if (visibilityManagerRef.current) {
+        visibilityManagerRef.current.cleanup();
+        visibilityManagerRef.current = null;
+      }
+      return;
+    }
+
+    // Initialize visibility manager when playing starts
+    if (!visibilityManagerRef.current) {
+      visibilityManagerRef.current = new VisibilityManager((elapsedMs) => {
+        // When returning from background, adjust startTime to account for elapsed time
+        if (startTimeRef.current !== null) {
+          startTimeRef.current -= elapsedMs;
+        }
+      });
+    }
+
+    const tick = () => {
+      const now = performance.now();
+      const start = startTimeRef.current || now;
+
+      if (!startTimeRef.current) {
+        startTimeRef.current = start;
+      }
+
+      const elapsed = (now - start) / 1000;
+      const remaining = currentBlock.duration - elapsed;
+      const remainingSeconds = Math.floor(remaining);
+
+      // Play countdown beeps at 3, 2, 1 (short beeps)
+      if (remaining > 0 && remainingSeconds >= 1 && remainingSeconds <= 3) {
+        if (lastBeepSecondRef.current !== remainingSeconds) {
+          audioManagerRef.current.playCountdownBeep();
+          lastBeepSecondRef.current = remainingSeconds;
+        }
+      }
+
+      // Play longer beep at 0 (same tone, 3x longer)
+      if (remaining > 0 && remainingSeconds === 0 && lastBeepSecondRef.current !== 0) {
+        audioManagerRef.current.playTransitionBeep();
+        lastBeepSecondRef.current = 0;
+      }
+
+      if (remaining <= 0) {
+        // Don't play beep here since we already played it at remainingSeconds = 0
+        lastBeepSecondRef.current = null; // Reset for next block
+
+        // Trigger haptic feedback on block transition
+        vibrateTransition();
+
+        if (currentBlockIndex < executionSequence.length - 1) {
+          setCurrentBlockIndex(prev => prev + 1);
+          setTimeRemaining(executionSequence[currentBlockIndex + 1].duration);
+          startTimeRef.current = null;
+        } else {
+          // Workout completed - last block finished
+          setIsPlaying(false);
+          setTimeRemaining(0);
+          startTimeRef.current = null;
+
+          // Calculate total workout duration
+          const totalSeconds = executionSequence.reduce((sum, block) => sum + block.duration, 0);
+          completionDurationRef.current = totalSeconds;
+
+          // Show completion overlay
+          setShowCompletion(true);
+        }
+      } else {
+        setTimeRemaining(remaining);
+        rafIdRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    rafIdRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, [isPlaying, currentBlockIndex, currentBlock, executionSequence]);
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getStateStyles = () => {
-    switch (currentState) {
+    if (!currentBlock) return "bg-background";
+    switch (currentBlock.type) {
       case "work":
-        return "bg-work"; // Red
+        return "bg-work";
       case "rest":
-        return "bg-rest"; // Green
+        return "bg-rest";
       case "prepare":
-        return "bg-prepare"; // Yellow
+        return "bg-prepare";
     }
   };
 
   const getTextColor = () => {
-    return currentState === "prepare" ? "text-prepare-foreground" : "text-foreground";
+    if (!currentBlock) return "text-foreground";
+    return currentBlock.type === "prepare" ? "text-prepare-foreground" : "text-foreground";
   };
 
   const getStateLabel = () => {
-    switch (currentState) {
+    if (!currentBlock) return "LOADING";
+    switch (currentBlock.type) {
       case "work":
         return "WORK";
       case "rest":
@@ -75,6 +239,14 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
         return "PREPARE";
     }
   };
+
+  if (loading || !workout || !currentBlock) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading workout...</p>
+      </div>
+    );
+  }
 
   return (
     <div className={`dark min-h-screen flex flex-col state-transition no-select ${getStateStyles()}`}>
@@ -89,8 +261,8 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
         </button>
 
         <div className={`text-center ${getTextColor()}`}>
-          <p className="text-sm font-medium opacity-80">HIIT Burner</p>
-          <p className="text-xs opacity-60">Round {data.round}</p>
+          <p className="text-sm font-medium opacity-80">{workout.name}</p>
+          <p className="text-xs opacity-60">Round {currentBlock.circle} of {workout.circles}</p>
         </div>
 
         <div className="w-12 h-12" />
@@ -102,21 +274,23 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
       </div>
 
       {/* Next Up Preview */}
-      <div className={`mx-4 mt-3 px-4 py-3 rounded-xl bg-black/15 ${getTextColor()}`}>
-        <p className="text-xs uppercase tracking-wider opacity-70">Next Up</p>
-        <div className="flex items-baseline justify-between mt-0.5">
-          <p className="text-lg font-semibold">{data.next}</p>
-          <p className="text-lg font-bold tabular-nums">{data.nextDuration}</p>
+      {nextBlock && (
+        <div className={`mx-4 mt-3 px-4 py-3 rounded-xl bg-black/15 ${getTextColor()}`}>
+          <p className="text-xs uppercase tracking-wider opacity-70">Next Up</p>
+          <div className="flex items-baseline justify-between mt-0.5">
+            <p className="text-lg font-semibold">{nextBlock.title}</p>
+            <p className="text-lg font-bold tabular-nums">{formatTime(nextBlock.duration)}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Timer Display */}
       <main className="flex-1 flex flex-col items-center justify-center px-4">
         <p className={`text-sm font-bold uppercase tracking-[0.2em] mb-2 ${getTextColor()} opacity-80`}>
-          {data.label}
+          {currentBlock.title.toUpperCase()}
         </p>
         <p className={`timer-display tabular-nums ${getTextColor()}`}>
-          {data.time}
+          {formatTime(timeRemaining)}
         </p>
       </main>
 
@@ -124,26 +298,21 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
       <div className={`mx-4 mb-4 flex items-center justify-between ${getTextColor()}`}>
         <button
           onClick={goToPrev}
-          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform"
+          disabled={currentBlockIndex === 0}
+          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform disabled:opacity-30"
         >
           <ChevronLeft className="w-5 h-5" />
           <span className="font-semibold">Prev</span>
         </button>
 
-        <div className="flex gap-2">
-          {states.map((state, idx) => (
-            <div
-              key={state}
-              className={`w-2.5 h-2.5 rounded-full transition-all ${
-                idx === stateIndex ? "bg-white scale-125" : "bg-white/40"
-              }`}
-            />
-          ))}
+        <div className="text-sm font-medium">
+          {currentBlockIndex + 1} / {executionSequence.length}
         </div>
 
         <button
           onClick={goToNext}
-          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform"
+          disabled={currentBlockIndex === executionSequence.length - 1}
+          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform disabled:opacity-30"
         >
           <span className="font-semibold">Next</span>
           <ChevronRight className="w-5 h-5" />
@@ -162,7 +331,13 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
           </button>
 
           <button
-            onClick={() => setIsPlaying(!isPlaying)}
+            onClick={async () => {
+              if (!isPlaying) {
+                // Initialize audio on first play (user gesture required)
+                await audioManagerRef.current.initialize();
+              }
+              setIsPlaying(!isPlaying);
+            }}
             className={`w-24 h-24 rounded-full bg-black/30 flex items-center justify-center active:scale-95 transition-transform shadow-2xl ${getTextColor()}`}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
@@ -182,6 +357,19 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
           </button>
         </div>
       </div>
+
+      {/* Workout Completion Overlay */}
+      {showCompletion && workout && (
+        <WorkoutCompletionOverlay
+          workoutName={workout.name}
+          totalDuration={completionDurationRef.current}
+          blocksCompleted={executionSequence.length}
+          onDismiss={() => {
+            setShowCompletion(false);
+            onNavigate("home");
+          }}
+        />
+      )}
     </div>
   );
 };
