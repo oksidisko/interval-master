@@ -31,6 +31,17 @@ export class AudioManager {
       // Load speech synthesis voices
       this.loadVoices();
 
+      // iOS workaround: Unlock speech synthesis by speaking immediately on user gesture
+      // iOS requires speechSynthesis.speak() to be called directly from user interaction
+      // Speaking a silent utterance unlocks it for future async calls
+      if ('speechSynthesis' in window) {
+        const unlock = new SpeechSynthesisUtterance('');
+        unlock.volume = 0;
+        unlock.rate = 10;
+        unlock.pitch = 0;
+        window.speechSynthesis.speak(unlock);
+      }
+
       this.initialized = true;
       return true;
     } catch (error) {
