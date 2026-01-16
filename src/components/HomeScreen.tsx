@@ -1,24 +1,64 @@
 import { Play, Pencil, Clock, Repeat } from "lucide-react";
+import { useState, useEffect } from "react";
+import { getAllWorkouts } from "@/db/workouts";
+import type { Workout as DBWorkout } from "@/types/workout";
 
-interface Workout {
+interface WorkoutDisplay {
   id: string;
   name: string;
   totalDuration: string;
   intervals: number;
 }
 
-const mockWorkouts: Workout[] = [
-  { id: "1", name: "HIIT Burner", totalDuration: "20:00", intervals: 8 },
-  { id: "2", name: "Tabata Classic", totalDuration: "4:00", intervals: 8 },
-  { id: "3", name: "Endurance Builder", totalDuration: "45:00", intervals: 12 },
-  { id: "4", name: "Quick Warm-Up", totalDuration: "5:00", intervals: 4 },
-];
-
 interface HomeScreenProps {
   onNavigate: (screen: "home" | "editor" | "player", workoutId?: string) => void;
 }
 
+const formatDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const calculateTotalDuration = (workout: DBWorkout): string => {
+  const blocksDuration = workout.blocks.reduce((sum, block) => sum + block.duration, 0);
+  const totalSeconds = (blocksDuration + workout.systemRestSec) * workout.circles;
+  return formatDuration(totalSeconds);
+};
+
 const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
+  const [workouts, setWorkouts] = useState<WorkoutDisplay[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadWorkouts();
+  }, []);
+
+  const loadWorkouts = async () => {
+    try {
+      const dbWorkouts = await getAllWorkouts();
+      const displayWorkouts: WorkoutDisplay[] = dbWorkouts.map(workout => ({
+        id: workout.id,
+        name: workout.name,
+        totalDuration: calculateTotalDuration(workout),
+        intervals: workout.blocks.length
+      }));
+      setWorkouts(displayWorkouts);
+    } catch (error) {
+      console.error('Failed to load workouts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading workouts...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col no-select">
       {/* Header */}
@@ -30,7 +70,7 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
       {/* Workout List */}
       <main className="flex-1 px-4 pb-32 overflow-y-auto">
         <div className="space-y-3">
-          {mockWorkouts.map((workout) => (
+          {workouts.map((workout) => (
             <div
               key={workout.id}
               className="bg-card rounded-2xl p-5 border border-border/50 active:scale-[0.98] transition-transform"
