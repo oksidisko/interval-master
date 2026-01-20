@@ -1,4 +1,4 @@
-import { ArrowLeft, GripVertical, Trash2, Plus, Settings2 } from "lucide-react";
+import { ArrowLeft, GripVertical, Trash2, Plus, Settings2, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getWorkout, saveWorkout } from "@/db/workouts";
 import { getSettings, updateDefaultRestTitle } from "@/db/settings";
@@ -592,12 +592,32 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
 
       {/* Edit Block Dialog */}
       <Dialog open={editBlockDialogOpen} onOpenChange={setEditBlockDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px]" hideCloseButton>
           <DialogHeader>
-            <DialogTitle>Edit Interval</DialogTitle>
-            <DialogDescription>
-              Modify the title, duration, and type of this interval.
-            </DialogDescription>
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <DialogTitle>Edit Interval</DialogTitle>
+                <DialogDescription>
+                  Modify the title, duration, and type of this interval.
+                </DialogDescription>
+              </div>
+              <div className="flex gap-2 ml-4">
+                <button
+                  onClick={handleCancelEditDialog}
+                  className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center active:scale-95 transition-transform"
+                  aria-label="Cancel"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handleSaveEditedBlock}
+                  className="w-10 h-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center active:scale-95 transition-transform"
+                  aria-label="Save"
+                >
+                  <Check className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           </DialogHeader>
 
           {editingBlock && !isSectionBlock(editingBlock) && (
@@ -654,15 +674,6 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
               </div>
             </div>
           )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCancelEditDialog}>
-              Cancel
-            </Button>
-            <Button type="button" variant="dialog" onClick={handleSaveEditedBlock}>
-              Save Changes
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
