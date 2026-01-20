@@ -1,9 +1,27 @@
-export interface Block {
+export interface WorkBlock {
   id: string;
-  type: 'work' | 'rest';
+  type: 'work';
   title: string;
   duration: number; // seconds
 }
+
+export interface RestBlock {
+  id: string;
+  type: 'rest';
+  title: string;
+  duration: number; // seconds
+}
+
+export interface SectionBlock {
+  id: string;
+  type: 'section';
+  title: string;
+  preparationTime: number;  // seconds, rest before each loop
+  loops: number;            // repetitions of contained blocks
+  blocks: Array<WorkBlock | RestBlock>;  // one-level nesting only
+}
+
+export type Block = WorkBlock | RestBlock | SectionBlock;
 
 export interface Workout {
   id: string;

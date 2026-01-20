@@ -1,5 +1,6 @@
 import { initDB } from './index';
 import { Workout } from '../types/workout';
+import { validateBlockStructure } from '../utils/blockTypeGuards';
 
 export async function getAllWorkouts(): Promise<Workout[]> {
   const db = await initDB();
@@ -13,6 +14,11 @@ export async function getWorkout(id: string): Promise<Workout | undefined> {
 }
 
 export async function saveWorkout(workout: Workout): Promise<void> {
+  const validationError = validateBlockStructure(workout.blocks);
+  if (validationError) {
+    throw new Error(`Invalid workout structure: ${validationError}`);
+  }
+
   const db = await initDB();
   workout.updatedAt = Date.now();
   await db.put('workouts', workout);

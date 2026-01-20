@@ -50,6 +50,10 @@
     --prepare: 45 93% 47%;
     --prepare-foreground: 0 0% 0%;
 
+    /* Section Block Color - Purple */
+    --section: 270 70% 60%;
+    --section-foreground: 0 0% 100%;
+
     /* Modal Dialog Blues */
     --dialog-background: 210 40% 98%;
     --dialog-foreground: 210 90% 25%;
@@ -203,4 +207,24 @@
 
 .dialog-content [data-radix-slider-thumb] {
   border-color: hsl(var(--dialog-primary));
+}
+
+/* Section block styling */
+.section-block {
+  background: hsl(var(--section) / 0.1);
+  border-left: 4px solid hsl(var(--section));
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.section-badge {
+  background: hsl(var(--section));
+  color: hsl(var(--section-foreground));
+}
+
+.section-nested-blocks {
+  margin-left: 1rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid hsl(var(--section) / 0.3);
 }

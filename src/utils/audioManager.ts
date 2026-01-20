@@ -128,6 +128,26 @@ export class AudioManager {
   }
 
   /**
+   * Estimate speech duration in seconds based on text length
+   * @param text - Text to estimate duration for
+   * @returns Estimated duration in seconds
+   */
+  public estimateSpeechDuration(text: string): number {
+    const lang = this.detectLanguage(text);
+    const prefix = lang === 'ru-RU' ? 'Приготовьтесь к' : 'Get ready for';
+    const fullText = `${prefix} ${text}`;
+
+    // Average speaking rate: ~150 words per minute (2.5 words/sec)
+    // Average word length: ~5 characters + 1 space = 6 chars/word
+    // Therefore: ~15 characters per second
+    const charsPerSecond = 15;
+    const estimatedDuration = fullText.length / charsPerSecond;
+
+    // Clamp to reasonable bounds (min 1s, max 4s)
+    return Math.max(1, Math.min(4, estimatedDuration));
+  }
+
+  /**
    * Select best available voice for language
    * Prioritizes Premium/Enhanced voices, then Natural, then any match
    * @param lang - Language code (e.g., 'ru-RU', 'en-US')

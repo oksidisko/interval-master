@@ -1,7 +1,11 @@
 import { ArrowLeft, GripVertical, Trash2, Plus, Settings2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getWorkout, saveWorkout } from "@/db/workouts";
-import type { Workout, Block } from "@/types/workout";
+import { getSettings, updateDefaultRestTitle } from "@/db/settings";
+import type { Workout, Block, SectionBlock, WorkBlock, RestBlock } from "@/types/workout";
+import { isSectionBlock } from "@/utils/blockTypeGuards";
+import { SortableSectionItem } from "@/components/SortableSectionItem";
+import { SectionSettingsDialog } from "@/components/SectionSettingsDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,22 +42,6 @@ const formatDuration = (seconds: number): string => {
     return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
   }
   return `${secs}s`;
-};
-
-const parseDurationInput = (input: string): number | null => {
-  const trimmed = input.trim();
-
-  // Handle MM:SS format
-  if (trimmed.includes(':')) {
-    const [mins, secs] = trimmed.split(':').map(s => parseInt(s, 10));
-    if (isNaN(mins) || isNaN(secs) || secs < 0 || secs >= 60) return null;
-    return mins * 60 + secs;
-  }
-
-  // Handle seconds only
-  const seconds = parseInt(trimmed, 10);
-  if (isNaN(seconds) || seconds < 0) return null;
-  return seconds;
 };
 
 interface SortableBlockItemProps {
@@ -143,7 +131,10 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [durationInput, setDurationInput] = useState<string>("");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const isNew = !workoutId;
+  const [sectionSettingsDialogOpen, setSectionSettingsDialogOpen] = useState(false);
+  const [editingSection, setEditingSection] = useState<SectionBlock | null>(null);
+  const [editingSectionParentId, setEditingSectionParentId] = useState<string | null>(null);
+  const [defaultRestTitle, setDefaultRestTitle] = useState<string>('Rest');
 
   const sensors = useSensors(
     useSensor(TouchSensor, {
@@ -164,7 +155,17 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
 
   useEffect(() => {
     loadWorkout();
+    loadSettings();
   }, [workoutId]);
+
+  const loadSettings = async () => {
+    try {
+      const settings = await getSettings();
+      setDefaultRestTitle(settings.defaultRestTitle);
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  };
 
   const loadWorkout = async () => {
     try {
@@ -213,7 +214,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
     const newBlock: Block = {
       id: crypto.randomUUID(),
       type,
-      title: type === 'work' ? 'Work' : 'Rest',
+      title: type === 'work' ? 'Work' : defaultRestTitle,
       duration: 30
     };
     const updated = { ...workout, blocks: [...workout.blocks, newBlock], updatedAt: Date.now() };
@@ -233,12 +234,16 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   };
 
   const handleOpenEditDialog = (block: Block) => {
+    // Only work/rest blocks can be edited (not sections)
+    if (isSectionBlock(block)) return;
+
     setEditingBlock({ ...block }); // Clone to allow cancellation
     setDurationInput(block.duration.toString());
+    setEditingSectionParentId(null); // Top-level block
     setEditBlockDialogOpen(true);
   };
 
-  const handleSaveEditedBlock = () => {
+  const handleSaveEditedBlock = async () => {
     if (!workout || !editingBlock) return;
 
     // Validation
@@ -247,11 +252,21 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       return;
     }
 
-    // Parse duration input
-    const parsedDuration = parseDurationInput(durationInput);
-    if (parsedDuration === null || parsedDuration <= 0) {
-      alert('Duration must be a valid positive number');
+    // Parse duration input (seconds only)
+    const parsedDuration = parseInt(durationInput, 10);
+    if (isNaN(parsedDuration) || parsedDuration <= 0) {
+      alert('Duration must be a valid positive number in seconds');
       return;
+    }
+
+    // Save rest title as default if it's a rest block
+    if (editingBlock.type === 'rest' && editingBlock.title !== defaultRestTitle) {
+      try {
+        await updateDefaultRestTitle(editingBlock.title);
+        setDefaultRestTitle(editingBlock.title);
+      } catch (error) {
+        console.error('Failed to save default rest title:', error);
+      }
     }
 
     const updatedBlock = {
@@ -259,9 +274,28 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       duration: parsedDuration
     };
 
-    const updatedBlocks = workout.blocks.map(b =>
-      b.id === updatedBlock.id ? updatedBlock : b
-    );
+    let updatedBlocks: Block[];
+
+    if (editingSectionParentId) {
+      // Editing a block inside a section
+      updatedBlocks = workout.blocks.map(b => {
+        if (isSectionBlock(b) && b.id === editingSectionParentId) {
+          const updatedSection = {
+            ...b,
+            blocks: b.blocks.map(child =>
+              child.id === updatedBlock.id ? (updatedBlock as WorkBlock | RestBlock) : child
+            )
+          };
+          return { ...updatedSection, title: generateSectionTitle(updatedSection) };
+        }
+        return b;
+      });
+    } else {
+      // Editing a top-level block
+      updatedBlocks = workout.blocks.map(b =>
+        b.id === updatedBlock.id ? updatedBlock : b
+      );
+    }
 
     const updated = {
       ...workout,
@@ -273,11 +307,13 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
     handleSaveWorkout(updated);
     setEditBlockDialogOpen(false);
     setEditingBlock(null);
+    setEditingSectionParentId(null);
   };
 
   const handleCancelEditDialog = () => {
     setEditBlockDialogOpen(false);
     setEditingBlock(null);
+    setEditingSectionParentId(null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -302,6 +338,140 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       updatedAt: Date.now()
     };
 
+    setWorkout(updated);
+    handleSaveWorkout(updated);
+  };
+
+  // Helper to generate section title from work blocks
+  const generateSectionTitle = (section: SectionBlock): string => {
+    const workBlocks = section.blocks.filter(b => b.type === 'work');
+    if (workBlocks.length === 0) {
+      return 'Section';
+    }
+    return workBlocks.map(b => b.title).join(', ');
+  };
+
+  // Section handlers
+  const handleAddSection = () => {
+    if (!workout) return;
+    const newSection: SectionBlock = {
+      id: crypto.randomUUID(),
+      type: 'section',
+      title: 'Section',
+      preparationTime: 10,
+      loops: 3,
+      blocks: []
+    };
+    const updated = { ...workout, blocks: [...workout.blocks, newSection], updatedAt: Date.now() };
+    setWorkout(updated);
+    handleSaveWorkout(updated);
+  };
+
+  const handleEditSection = (sectionId: string) => {
+    if (!workout) return;
+    const section = workout.blocks.find(b => b.id === sectionId);
+    if (section && isSectionBlock(section)) {
+      setEditingSection(section);
+      setEditingSectionParentId(null);
+      setSectionSettingsDialogOpen(true);
+    }
+  };
+
+  const handleDeleteSection = (sectionId: string) => {
+    if (!workout) return;
+    const section = workout.blocks.find(b => b.id === sectionId);
+    if (section && isSectionBlock(section) && section.blocks.length > 0) {
+      if (!confirm(`Delete section "${section.title}" and its ${section.blocks.length} intervals?`)) {
+        return;
+      }
+    }
+    const updated = {
+      ...workout,
+      blocks: workout.blocks.filter(b => b.id !== sectionId),
+      updatedAt: Date.now()
+    };
+    setWorkout(updated);
+    handleSaveWorkout(updated);
+  };
+
+  const handleSaveSectionSettings = (updatedSection: SectionBlock) => {
+    if (!workout) return;
+    const updatedBlocks = workout.blocks.map(b =>
+      b.id === updatedSection.id ? updatedSection : b
+    );
+    const updated = {
+      ...workout,
+      blocks: updatedBlocks,
+      updatedAt: Date.now()
+    };
+    setWorkout(updated);
+    handleSaveWorkout(updated);
+  };
+
+  const handleAddBlockToSection = (sectionId: string, blockType: 'work' | 'rest') => {
+    if (!workout) return;
+    const newBlock: WorkBlock | RestBlock = {
+      id: crypto.randomUUID(),
+      type: blockType,
+      title: blockType === 'work' ? 'Work' : defaultRestTitle,
+      duration: 30
+    };
+
+    const updatedBlocks = workout.blocks.map(block => {
+      if (isSectionBlock(block) && block.id === sectionId) {
+        const updatedSection = { ...block, blocks: [...block.blocks, newBlock] };
+        return { ...updatedSection, title: generateSectionTitle(updatedSection) };
+      }
+      return block;
+    });
+
+    const updated = { ...workout, blocks: updatedBlocks, updatedAt: Date.now() };
+    setWorkout(updated);
+    handleSaveWorkout(updated);
+  };
+
+  const handleEditBlockInSection = (sectionId: string, blockId: string) => {
+    if (!workout) return;
+    const section = workout.blocks.find(b => b.id === sectionId);
+    if (section && isSectionBlock(section)) {
+      const block = section.blocks.find(b => b.id === blockId);
+      if (block) {
+        setEditingBlock({ ...block });
+        setDurationInput(block.duration.toString());
+        setEditingSectionParentId(sectionId);
+        setEditBlockDialogOpen(true);
+      }
+    }
+  };
+
+  const handleDeleteBlockFromSection = (sectionId: string, blockId: string) => {
+    if (!workout) return;
+    const updatedBlocks = workout.blocks.map(block => {
+      if (isSectionBlock(block) && block.id === sectionId) {
+        const updatedSection = { ...block, blocks: block.blocks.filter(b => b.id !== blockId) };
+        return { ...updatedSection, title: generateSectionTitle(updatedSection) };
+      }
+      return block;
+    });
+
+    const updated = { ...workout, blocks: updatedBlocks, updatedAt: Date.now() };
+    setWorkout(updated);
+    handleSaveWorkout(updated);
+  };
+
+  const handleReorderInSection = (sectionId: string, activeId: string, overId: string) => {
+    if (!workout) return;
+    const updatedBlocks = workout.blocks.map(block => {
+      if (isSectionBlock(block) && block.id === sectionId) {
+        const oldIndex = block.blocks.findIndex(b => b.id === activeId);
+        const newIndex = block.blocks.findIndex(b => b.id === overId);
+        const updatedSection = { ...block, blocks: arrayMove(block.blocks, oldIndex, newIndex) };
+        return { ...updatedSection, title: generateSectionTitle(updatedSection) };
+      }
+      return block;
+    });
+
+    const updated = { ...workout, blocks: updatedBlocks, updatedAt: Date.now() };
     setWorkout(updated);
     handleSaveWorkout(updated);
   };
@@ -392,15 +562,28 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-2">
-                {workout.blocks.map((block, index) => (
-                  <SortableBlockItem
-                    key={block.id}
-                    block={block}
-                    index={index}
-                    onEdit={handleOpenEditDialog}
-                    onDelete={handleDeleteBlock}
-                  />
-                ))}
+                {workout.blocks.map((block, index) =>
+                  isSectionBlock(block) ? (
+                    <SortableSectionItem
+                      key={block.id}
+                      section={block}
+                      onEditSection={handleEditSection}
+                      onDeleteSection={handleDeleteSection}
+                      onAddToSection={handleAddBlockToSection}
+                      onEditBlockInSection={handleEditBlockInSection}
+                      onDeleteBlockFromSection={handleDeleteBlockFromSection}
+                      onReorderInSection={handleReorderInSection}
+                    />
+                  ) : (
+                    <SortableBlockItem
+                      key={block.id}
+                      block={block}
+                      index={index}
+                      onEdit={handleOpenEditDialog}
+                      onDelete={handleDeleteBlock}
+                    />
+                  )
+                )}
               </div>
             </SortableContext>
           </DndContext>
@@ -417,7 +600,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
             </DialogDescription>
           </DialogHeader>
 
-          {editingBlock && (
+          {editingBlock && !isSectionBlock(editingBlock) && (
             <div className="grid gap-4 py-4">
               {/* Type Toggle */}
               <div className="grid gap-2">
@@ -455,15 +638,18 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
 
               {/* Duration Input */}
               <div className="grid gap-2">
-                <Label htmlFor="block-duration">Duration</Label>
+                <Label htmlFor="block-duration">Duration (seconds)</Label>
                 <Input
                   id="block-duration"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
                   value={durationInput}
                   onChange={(e) => setDurationInput(e.target.value)}
-                  placeholder="30 or 1:30"
+                  placeholder="30"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Enter seconds (30) or MM:SS format (1:30)
+                  Enter duration in seconds (e.g., 30, 60, 90)
                 </p>
               </div>
             </div>
@@ -548,9 +734,17 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
         </DialogContent>
       </Dialog>
 
+      {/* Section Settings Dialog */}
+      <SectionSettingsDialog
+        section={editingSection}
+        open={sectionSettingsDialogOpen}
+        onOpenChange={setSectionSettingsDialogOpen}
+        onSave={handleSaveSectionSettings}
+      />
+
       {/* Fixed Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 p-4 safe-bottom bg-background/95 backdrop-blur-sm border-t border-border/50">
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
             onClick={() => handleAddBlock("work")}
             className="flex-1 h-14 bg-work/20 text-work border border-work/30 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -564,6 +758,13 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
           >
             <Plus className="w-5 h-5" />
             Rest
+          </button>
+          <button
+            onClick={handleAddSection}
+            className="flex-1 h-14 bg-section/20 text-section border border-section/30 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <Plus className="w-5 h-5" />
+            Section
           </button>
         </div>
         <button

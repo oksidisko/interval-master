@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { X, SkipBack, Play, Pause, SkipForward, ChevronLeft, ChevronRight } from "lucide-react";
 import { getWorkout } from "@/db/workouts";
-import type { Workout, Block } from "@/types/workout";
+import type { Workout, Block, SectionBlock } from "@/types/workout";
 import { VisibilityManager } from "@/utils/visibilityManager";
 import { vibrateTransition } from "@/utils/hapticFeedback";
 import { AudioManager } from "@/utils/audioManager";
+import { isSectionBlock } from "@/utils/blockTypeGuards";
 import WorkoutCompletionOverlay from "./WorkoutCompletionOverlay";
 
 type IntervalType = "prepare" | "work" | "rest";
@@ -66,10 +67,40 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
     }
   };
 
+  const expandSection = (
+    sequence: ExecutionBlock[],
+    section: SectionBlock,
+    currentCircle: number
+  ): void => {
+    for (let loop = 1; loop <= section.loops; loop++) {
+      // Add preparation before each section loop
+      if (section.preparationTime > 0) {
+        sequence.push({
+          type: 'prepare',
+          title: `${section.title} - Get Ready`,
+          duration: section.preparationTime,
+          circle: currentCircle
+        });
+      }
+
+      // Add all child blocks (NO prefix per user preference)
+      for (const childBlock of section.blocks) {
+        // childBlock is WorkBlock | RestBlock (never SectionBlock due to type definition)
+        sequence.push({
+          type: childBlock.type as 'work' | 'rest',
+          title: childBlock.title,
+          duration: childBlock.duration,
+          circle: currentCircle
+        });
+      }
+    }
+  };
+
   const buildExecutionSequence = (workout: Workout): ExecutionBlock[] => {
     const sequence: ExecutionBlock[] = [];
 
     for (let circle = 1; circle <= workout.circles; circle++) {
+      // Initial preparation
       if (circle === 1) {
         sequence.push({
           type: 'prepare',
@@ -79,15 +110,22 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
         });
       }
 
+      // Process each block
       for (const block of workout.blocks) {
-        sequence.push({
-          type: block.type,
-          title: block.title,
-          duration: block.duration,
-          circle
-        });
+        if (isSectionBlock(block)) {
+          expandSection(sequence, block, circle);
+        } else {
+          // Existing basic block handling
+          sequence.push({
+            type: block.type,
+            title: block.title,
+            duration: block.duration,
+            circle
+          });
+        }
       }
 
+      // Rest between rounds
       if (circle < workout.circles) {
         sequence.push({
           type: 'prepare',
@@ -162,14 +200,22 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
         }
       }
 
-      // Announce next block at 10 seconds (or at start for short blocks)
+      // Announce next block - calculate timing based on speech duration
       if (nextBlock && remaining > 0) {
-        const isShortBlock = currentBlock.duration < 10;
-        const announceAt = isShortBlock ? Math.floor(currentBlock.duration) : 10;
+        // Calculate when to announce based on speech duration
+        const speechDuration = audioManagerRef.current.estimateSpeechDuration(nextBlock.title);
+        const bufferTime = 0.5; // Small gap between speech end and countdown start
+        const countdownTime = 3; // Countdown starts at 3 seconds
+        const announceAt = Math.ceil(speechDuration + bufferTime + countdownTime);
 
-        if (remainingSeconds === announceAt && lastAnnouncementSecondRef.current !== announceAt) {
+        // For short blocks, announce at the start
+        const effectiveAnnounceAt = currentBlock.duration < announceAt
+          ? Math.floor(currentBlock.duration)
+          : announceAt;
+
+        if (remainingSeconds === effectiveAnnounceAt && lastAnnouncementSecondRef.current !== effectiveAnnounceAt) {
           audioManagerRef.current.announceNextBlock(nextBlock.title);
-          lastAnnouncementSecondRef.current = announceAt;
+          lastAnnouncementSecondRef.current = effectiveAnnounceAt;
         }
       }
 

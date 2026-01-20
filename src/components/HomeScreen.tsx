@@ -1,7 +1,8 @@
 import { Play, Pencil, Clock, Repeat } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getAllWorkouts } from "@/db/workouts";
-import type { Workout as DBWorkout } from "@/types/workout";
+import type { Workout as DBWorkout, Block } from "@/types/workout";
+import { isSectionBlock } from "@/utils/blockTypeGuards";
 
 interface WorkoutDisplay {
   id: string;
@@ -20,8 +21,18 @@ const formatDuration = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+const calculateBlockDuration = (block: Block): number => {
+  if (isSectionBlock(block)) {
+    // Calculate section duration: (child blocks duration + prep time) * loops
+    const childDuration = block.blocks.reduce((sum, child) => sum + child.duration, 0);
+    return (childDuration + block.preparationTime) * block.loops;
+  }
+  // Regular work/rest block (TypeScript knows it's WorkBlock | RestBlock here)
+  return (block as { duration: number }).duration;
+};
+
 const calculateTotalDuration = (workout: DBWorkout): string => {
-  const blocksDuration = workout.blocks.reduce((sum, block) => sum + block.duration, 0);
+  const blocksDuration = workout.blocks.reduce((sum, block) => sum + calculateBlockDuration(block), 0);
   const totalSeconds = (blocksDuration + workout.systemRestSec) * workout.circles;
   return formatDuration(totalSeconds);
 };
