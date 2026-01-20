@@ -1,5 +1,5 @@
 import { ArrowLeft, GripVertical, Trash2, Plus, Settings2, Check, X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getWorkout, saveWorkout } from "@/db/workouts";
 import { getSettings, updateDefaultRestTitle } from "@/db/settings";
 import type { Workout, Block, SectionBlock, WorkBlock, RestBlock } from "@/types/workout";
@@ -135,6 +135,8 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   const [editingSection, setEditingSection] = useState<SectionBlock | null>(null);
   const [editingSectionParentId, setEditingSectionParentId] = useState<string | null>(null);
   const [defaultRestTitle, setDefaultRestTitle] = useState<string>('Rest');
+  const isCancelingRef = useRef(false);
+  const isSavingRef = useRef(false);
 
   const sensors = useSensors(
     useSensor(TouchSensor, {
@@ -305,12 +307,105 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
 
     setWorkout(updated);
     handleSaveWorkout(updated);
+    isSavingRef.current = true;
     setEditBlockDialogOpen(false);
     setEditingBlock(null);
     setEditingSectionParentId(null);
   };
 
   const handleCancelEditDialog = () => {
+    isCancelingRef.current = true;
+    setEditBlockDialogOpen(false);
+    setEditingBlock(null);
+    setEditingSectionParentId(null);
+  };
+
+  const handleEditDialogOpenChange = async (open: boolean) => {
+    // If opening the dialog, just set state
+    if (open) {
+      setEditBlockDialogOpen(true);
+      return;
+    }
+
+    // If explicitly saving via button, don't auto-save (already saved)
+    if (isSavingRef.current) {
+      isSavingRef.current = false;
+      return;
+    }
+
+    // If explicitly canceling, don't auto-save
+    if (isCancelingRef.current) {
+      isCancelingRef.current = false;
+      return;
+    }
+
+    // If closing, auto-save changes if valid
+    if (!workout || !editingBlock) {
+      setEditBlockDialogOpen(false);
+      setEditingBlock(null);
+      setEditingSectionParentId(null);
+      return;
+    }
+
+    // Validate before auto-saving
+    if (!editingBlock.title.trim()) {
+      // Invalid: keep dialog open
+      return;
+    }
+
+    const parsedDuration = parseInt(durationInput, 10);
+    if (isNaN(parsedDuration) || parsedDuration <= 0) {
+      // Invalid: keep dialog open
+      return;
+    }
+
+    // Valid: auto-save changes
+    // Save rest title as default if it's a rest block
+    if (editingBlock.type === 'rest' && editingBlock.title !== defaultRestTitle) {
+      try {
+        await updateDefaultRestTitle(editingBlock.title);
+        setDefaultRestTitle(editingBlock.title);
+      } catch (error) {
+        console.error('Failed to save default rest title:', error);
+      }
+    }
+
+    const updatedBlock = {
+      ...editingBlock,
+      duration: parsedDuration
+    };
+
+    let updatedBlocks: Block[];
+
+    if (editingSectionParentId) {
+      // Editing a block inside a section
+      updatedBlocks = workout.blocks.map(b => {
+        if (isSectionBlock(b) && b.id === editingSectionParentId) {
+          const updatedSection = {
+            ...b,
+            blocks: b.blocks.map(child =>
+              child.id === updatedBlock.id ? (updatedBlock as WorkBlock | RestBlock) : child
+            )
+          };
+          return { ...updatedSection, title: generateSectionTitle(updatedSection) };
+        }
+        return b;
+      });
+    } else {
+      // Editing a top-level block
+      updatedBlocks = workout.blocks.map(b =>
+        b.id === updatedBlock.id ? updatedBlock : b
+      );
+    }
+
+    const updated = {
+      ...workout,
+      blocks: updatedBlocks,
+      updatedAt: Date.now()
+    };
+
+    setWorkout(updated);
+    handleSaveWorkout(updated);
     setEditBlockDialogOpen(false);
     setEditingBlock(null);
     setEditingSectionParentId(null);
@@ -591,7 +686,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       </main>
 
       {/* Edit Block Dialog */}
-      <Dialog open={editBlockDialogOpen} onOpenChange={setEditBlockDialogOpen}>
+      <Dialog open={editBlockDialogOpen} onOpenChange={handleEditDialogOpenChange}>
         <DialogContent className="sm:max-w-[425px]" hideCloseButton>
           <DialogHeader>
             <div className="flex items-start justify-between">
