@@ -1,8 +1,10 @@
-import { Play, Pencil, Clock, Repeat } from "lucide-react";
+import { Play, Pencil, Clock, Repeat, Share2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getAllWorkouts } from "@/db/workouts";
 import type { Workout as DBWorkout, Block } from "@/types/workout";
 import { isSectionBlock } from "@/utils/blockTypeGuards";
+import { compactWorkout } from "@/utils/shareWorkout";
+import { useToast } from "@/hooks/use-toast";
 
 interface WorkoutDisplay {
   id: string;
@@ -39,7 +41,9 @@ const calculateTotalDuration = (workout: DBWorkout): string => {
 
 const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
   const [workouts, setWorkouts] = useState<WorkoutDisplay[]>([]);
+  const [fullWorkouts, setFullWorkouts] = useState<DBWorkout[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadWorkouts();
@@ -48,6 +52,7 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
   const loadWorkouts = async () => {
     try {
       const dbWorkouts = await getAllWorkouts();
+      setFullWorkouts(dbWorkouts);
       const displayWorkouts: WorkoutDisplay[] = dbWorkouts.map(workout => ({
         id: workout.id,
         name: workout.name,
@@ -59,6 +64,38 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
       console.error('Failed to load workouts:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleShare = async (workoutId: string) => {
+    try {
+      const workout = fullWorkouts.find(w => w.id === workoutId);
+      if (!workout) {
+        toast({ title: "Workout not found", variant: "destructive" });
+        return;
+      }
+
+      const compactData = compactWorkout(workout);
+      const json = JSON.stringify(compactData);
+      const base64 = btoa(json);
+      const urlSafe = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+      const shareUrl = `${window.location.origin}?workout=${urlSafe}`;
+
+      if (navigator.share) {
+        await navigator.share({
+          title: workout.name,
+          text: `Check out my "${workout.name}" workout!`,
+          url: shareUrl
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({ title: "Link copied to clipboard!" });
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        toast({ title: "Failed to share", variant: "destructive" });
+      }
     }
   };
 
@@ -98,6 +135,16 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
                       <Repeat className="w-4 h-4" />
                       {workout.intervals} intervals
                     </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleShare(workout.id);
+                      }}
+                      className="ml-1 p-1 hover:bg-secondary rounded active:scale-95 transition-transform"
+                      aria-label="Share workout"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
