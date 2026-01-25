@@ -82,19 +82,30 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
 
       const shareUrl = `${window.location.origin}?workout=${urlSafe}`;
 
+      console.log('Share URL:', shareUrl);
+      console.log('Navigator.share available:', !!navigator.share);
+
       if (navigator.share) {
-        await navigator.share({
+        const shareData = {
           title: workout.name,
           text: `Check out my "${workout.name}" workout!`,
           url: shareUrl
-        });
+        };
+        console.log('Attempting to share:', shareData);
+        await navigator.share(shareData);
+        console.log('Share successful');
       } else {
         await navigator.clipboard.writeText(shareUrl);
         toast({ title: "Link copied to clipboard!" });
       }
     } catch (error) {
+      console.error('Share error:', error);
       if (error instanceof Error && error.name !== 'AbortError') {
-        toast({ title: "Failed to share", variant: "destructive" });
+        toast({
+          title: "Failed to share",
+          description: error.message,
+          variant: "destructive"
+        });
       }
     }
   };
