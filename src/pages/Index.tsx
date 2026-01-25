@@ -3,7 +3,7 @@ import HomeScreen from "@/components/HomeScreen";
 import WorkoutEditor from "@/components/WorkoutEditor";
 import TrainingPlayer from "@/components/TrainingPlayer";
 import { ImportWorkoutDialog } from "@/components/ImportWorkoutDialog";
-import { CompactWorkout } from "@/utils/shareWorkout";
+import { CompactWorkout, decodeBase64Unicode } from "@/utils/shareWorkout";
 import { saveWorkout } from "@/db/workouts";
 import { useToast } from "@/hooks/use-toast";
 import type { Workout } from "@/types/workout";
@@ -25,7 +25,7 @@ const Index = () => {
       try {
         // URL-safe decode
         const base64 = workoutParam.replace(/-/g, '+').replace(/_/g, '/');
-        const json = atob(base64);
+        const json = decodeBase64Unicode(base64);
         const compact = JSON.parse(json);
 
         // Basic validation

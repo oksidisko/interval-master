@@ -8,6 +8,40 @@ import { Workout, Block, WorkBlock, RestBlock, SectionBlock } from '@/types/work
  * - Omitted timestamps (set to current time on import)
  */
 
+/**
+ * Unicode-safe Base64 encoding
+ * Handles Cyrillic (Russian) and other Unicode characters
+ */
+export function encodeBase64Unicode(str: string): string {
+  // Convert string to UTF-8 bytes using TextEncoder
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+
+  // Convert bytes to binary string
+  const binaryString = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+
+  // Encode to Base64
+  return btoa(binaryString);
+}
+
+/**
+ * Unicode-safe Base64 decoding
+ */
+export function decodeBase64Unicode(base64: string): string {
+  // Decode Base64 to binary string
+  const binaryString = atob(base64);
+
+  // Convert binary string to bytes
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // Decode UTF-8 bytes to string
+  const decoder = new TextDecoder();
+  return decoder.decode(bytes);
+}
+
 export interface CompactBlock {
   t: 'w' | 'r' | 's';  // type: work/rest/section
   n: string;           // title

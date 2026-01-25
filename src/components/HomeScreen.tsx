@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { getAllWorkouts } from "@/db/workouts";
 import type { Workout as DBWorkout, Block } from "@/types/workout";
 import { isSectionBlock } from "@/utils/blockTypeGuards";
-import { compactWorkout } from "@/utils/shareWorkout";
+import { compactWorkout, encodeBase64Unicode } from "@/utils/shareWorkout";
 import { useToast } from "@/hooks/use-toast";
 
 interface WorkoutDisplay {
@@ -77,7 +77,7 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
 
       const compactData = compactWorkout(workout);
       const json = JSON.stringify(compactData);
-      const base64 = btoa(json);
+      const base64 = encodeBase64Unicode(json);
       const urlSafe = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
       const shareUrl = `${window.location.origin}?workout=${urlSafe}`;
