@@ -83,6 +83,7 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
       const shareUrl = `${window.location.origin}?workout=${urlSafe}`;
 
       console.log('Share URL:', shareUrl);
+      console.log('Share URL length:', shareUrl.length);
       console.log('Navigator.share available:', !!navigator.share);
 
       if (navigator.share) {
@@ -91,6 +92,16 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
           text: `Check out my "${workout.name}" workout!`,
           url: shareUrl
         };
+
+        // Check if the data can be shared (Android compatibility check)
+        if (navigator.canShare && !navigator.canShare(shareData)) {
+          console.error('Cannot share this data:', shareData);
+          // Fallback to clipboard
+          await navigator.clipboard.writeText(shareUrl);
+          toast({ title: "Link copied to clipboard!" });
+          return;
+        }
+
         console.log('Attempting to share:', shareData);
         await navigator.share(shareData);
         console.log('Share successful');
