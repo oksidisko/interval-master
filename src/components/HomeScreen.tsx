@@ -133,7 +133,7 @@ const HomeScreen = ({ onNavigate }: HomeScreenProps) => {
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Repeat className="w-4 h-4" />
-                      {workout.intervals} intervals
+                      {workout.intervals}
                     </span>
                     <button
                       onClick={(e) => {
