@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import HomeScreen from "@/components/HomeScreen";
 import WorkoutEditor from "@/components/WorkoutEditor";
 import TrainingPlayer from "@/components/TrainingPlayer";
+import ExerciseLibrary from "@/components/ExerciseLibrary";
 import { ImportWorkoutDialog } from "@/components/ImportWorkoutDialog";
 import { CompactWorkout, decodeBase64Unicode } from "@/utils/shareWorkout";
 import { saveWorkout } from "@/db/workouts";
 import { useToast } from "@/hooks/use-toast";
 import type { Workout } from "@/types/workout";
 
-type Screen = "home" | "editor" | "player";
+type Screen = "home" | "editor" | "player" | "library";
 
 const Index = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
@@ -82,6 +83,9 @@ const Index = () => {
       )}
       {currentScreen === "player" && activeWorkoutId && (
         <TrainingPlayer workoutId={activeWorkoutId} onNavigate={handleNavigate} />
+      )}
+      {currentScreen === "library" && (
+        <ExerciseLibrary onNavigate={handleNavigate} />
       )}
       {sharedWorkout && (
         <ImportWorkoutDialog
