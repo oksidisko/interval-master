@@ -162,7 +162,6 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   useEffect(() => {
     loadWorkout();
     loadSettings();
-    loadExercises();
   }, [workoutId]);
 
   const loadSettings = async () => {
@@ -174,20 +173,54 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
     }
   };
 
-  const loadExercises = async () => {
-    try {
-      const data = await getAllExercises();
-      setExercises(data);
-    } catch (error) {
-      console.error('Failed to load exercises:', error);
+  const syncExerciseTitles = async (workout: Workout, exerciseList: Exercise[]): Promise<Workout> => {
+    const exerciseMap = new Map(exerciseList.map(e => [e.id, e]));
+    let hasChanges = false;
+
+    const syncBlock = (block: WorkBlock | RestBlock): WorkBlock | RestBlock => {
+      if (block.type === 'work' && 'exerciseId' in block && block.exerciseId) {
+        const exercise = exerciseMap.get(block.exerciseId);
+        if (exercise && exercise.title !== block.title) {
+          hasChanges = true;
+          return { ...block, title: exercise.title };
+        }
+      }
+      return block;
+    };
+
+    const syncedBlocks = workout.blocks.map(block => {
+      if (isSectionBlock(block)) {
+        const syncedChildren = block.blocks.map(syncBlock);
+        const childrenChanged = syncedChildren.some((child, i) => child !== block.blocks[i]);
+        if (childrenChanged) {
+          hasChanges = true;
+          return { ...block, blocks: syncedChildren };
+        }
+        return block;
+      }
+      return syncBlock(block as WorkBlock | RestBlock);
+    });
+
+    if (hasChanges) {
+      const updated = { ...workout, blocks: syncedBlocks, updatedAt: Date.now() };
+      await saveWorkout(updated);
+      return updated;
     }
+
+    return workout;
   };
 
   const loadWorkout = async () => {
     try {
+      // Load exercises first
+      const exerciseList = await getAllExercises();
+      setExercises(exerciseList);
+
       if (workoutId) {
-        const data = await getWorkout(workoutId);
+        let data = await getWorkout(workoutId);
         if (data) {
+          // Sync titles from library
+          data = await syncExerciseTitles(data, exerciseList);
           setWorkout(data);
         }
       } else {
