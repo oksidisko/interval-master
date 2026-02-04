@@ -2,8 +2,11 @@ import { ArrowLeft, GripVertical, Trash2, Plus, Settings2, Check, X } from "luci
 import { useState, useEffect, useRef } from "react";
 import { getWorkout, saveWorkout } from "@/db/workouts";
 import { getSettings, updateDefaultRestTitle } from "@/db/settings";
+import { getAllExercises } from "@/db/exercises";
 import type { Workout, Block, SectionBlock, WorkBlock, RestBlock } from "@/types/workout";
+import type { Exercise } from "@/types/exercise";
 import { isSectionBlock } from "@/utils/blockTypeGuards";
+import { ExerciseCombobox } from "@/components/ui/exercise-combobox";
 import { SortableSectionItem } from "@/components/SortableSectionItem";
 import { SectionSettingsDialog } from "@/components/SectionSettingsDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -135,6 +138,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   const [editingSection, setEditingSection] = useState<SectionBlock | null>(null);
   const [editingSectionParentId, setEditingSectionParentId] = useState<string | null>(null);
   const [defaultRestTitle, setDefaultRestTitle] = useState<string>('Rest');
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const isCancelingRef = useRef(false);
   const isSavingRef = useRef(false);
 
@@ -158,6 +162,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   useEffect(() => {
     loadWorkout();
     loadSettings();
+    loadExercises();
   }, [workoutId]);
 
   const loadSettings = async () => {
@@ -166,6 +171,15 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       setDefaultRestTitle(settings.defaultRestTitle);
     } catch (error) {
       console.error('Failed to load settings:', error);
+    }
+  };
+
+  const loadExercises = async () => {
+    try {
+      const data = await getAllExercises();
+      setExercises(data);
+    } catch (error) {
+      console.error('Failed to load exercises:', error);
     }
   };
 
@@ -743,12 +757,29 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
               {/* Title Input */}
               <div className="grid gap-2">
                 <Label htmlFor="block-title">Title</Label>
-                <Input
-                  id="block-title"
-                  value={editingBlock.title}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, title: e.target.value })}
-                  placeholder="e.g., Push-ups, Break"
-                />
+                {editingBlock.type === 'work' ? (
+                  <ExerciseCombobox
+                    exercises={exercises}
+                    value={editingBlock.title}
+                    exerciseId={'exerciseId' in editingBlock ? editingBlock.exerciseId : undefined}
+                    onSelect={(title, duration, exerciseId) => {
+                      setEditingBlock({ ...editingBlock, title, exerciseId } as WorkBlock);
+                      setDurationInput(duration.toString());
+                    }}
+                    onChange={(title) => {
+                      // Clear exerciseId when typing custom text
+                      setEditingBlock({ ...editingBlock, title, exerciseId: undefined } as WorkBlock);
+                    }}
+                    placeholder="Search exercises or type custom..."
+                  />
+                ) : (
+                  <Input
+                    id="block-title"
+                    value={editingBlock.title}
+                    onChange={(e) => setEditingBlock({ ...editingBlock, title: e.target.value })}
+                    placeholder="e.g., Break, Recovery"
+                  />
+                )}
               </div>
 
               {/* Duration Input */}
