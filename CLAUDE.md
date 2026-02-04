@@ -102,10 +102,21 @@ This ensures timer accuracy (<100ms drift over 60 minutes) even when app is back
 **Haptics** (`src/utils/hapticFeedback.ts`):
 - Uses `navigator.vibrate([200])` on block transitions (Android support)
 
+### Workout Compiler
+
+The workout compiler (`src/utils/compileWorkout.ts`) transforms a `Workout` definition into an executable sequence of `ExecutionBlock`s. Key features:
+
+- **Two-sided exercises**: Exercises marked `isTwoSided` expand to: `work (side 1) → rest (10s switch) → work (side 2)`
+- **Section loops**: Sections with `loops > 1` repeat their child blocks
+- **Preparation blocks**: Adds "Get Ready" and "Rest Between Rounds" blocks based on `systemRestSec`
+- **Language detection**: Auto-detects Russian (Cyrillic) for localized "Switch sides" text
+
+**Duration calculation** (`src/utils/calculateWorkoutDuration.ts`): Uses the compiler to get accurate total duration, accounting for two-sided expansion.
+
 ### Component Structure
 
 **Main Components**:
-- `HomeScreen.tsx`: Workout list with create/edit/delete/start actions
+- `HomeScreen.tsx`: Workout list with create/edit/delete/start actions (uses compiled duration)
 - `WorkoutEditor.tsx`: Edit workout details with drag-and-drop block reordering (via `@dnd-kit`)
   - Auto-scrolls to bottom when adding new blocks
   - Auto-opens edit dialog when adding Work blocks (saves extra tap)

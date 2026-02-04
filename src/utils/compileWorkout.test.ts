@@ -1,6 +1,7 @@
 // src/utils/compileWorkout.test.ts
 import { describe, it, expect } from 'vitest';
 import { compileWorkout } from './compileWorkout';
+import { calculateWorkoutDuration } from './calculateWorkoutDuration';
 import type { Workout, WorkBlock, RestBlock, SectionBlock } from '@/types/workout';
 import type { Exercise } from '@/types/exercise';
 
@@ -154,5 +155,76 @@ describe('compileWorkout', () => {
     expect(result.blocks[0]).toMatchObject({ type: 'work', title: 'Lunges' });
     expect(result.blocks[1]).toMatchObject({ type: 'rest', title: 'Switch sides' });
     expect(result.blocks[2]).toMatchObject({ type: 'work', title: 'Lunges (other side)' });
+  });
+});
+
+describe('calculateWorkoutDuration', () => {
+  const makeWorkBlock = (title: string, duration: number, exerciseId?: string): WorkBlock => ({
+    id: crypto.randomUUID(),
+    type: 'work',
+    title,
+    duration,
+    exerciseId,
+  });
+
+  const makeWorkout = (blocks: (WorkBlock | RestBlock | SectionBlock)[], circles = 1, systemRestSec = 0): Workout => ({
+    id: crypto.randomUUID(),
+    name: 'Test Workout',
+    blocks,
+    circles,
+    systemRestSec,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
+  const makeExercise = (id: string, isTwoSided = false): Exercise => ({
+    id,
+    title: 'Test Exercise',
+    defaultDuration: 30,
+    isTwoSided,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
+  it('calculates duration for simple workout without two-sided exercises', () => {
+    const workout = makeWorkout([makeWorkBlock('Push-ups', 30)]);
+    const duration = calculateWorkoutDuration(workout, []);
+
+    expect(duration).toBe(30);
+  });
+
+  it('calculates duration for two-sided exercise (30s + 10s switch + 30s = 70s)', () => {
+    const exerciseId = 'exercise-1';
+    const exercise = makeExercise(exerciseId, true);
+    const workout = makeWorkout([makeWorkBlock('Side Plank', 30, exerciseId)]);
+
+    const duration = calculateWorkoutDuration(workout, [exercise]);
+
+    // 30s (side 1) + 10s (switch) + 30s (side 2) = 70s
+    expect(duration).toBe(70);
+  });
+
+  it('calculates duration with preparation time and multiple circles', () => {
+    const workout = makeWorkout([makeWorkBlock('Squats', 30)], 2, 5);
+
+    const duration = calculateWorkoutDuration(workout, []);
+
+    // Circle 1: 5s (prepare) + 30s (work)
+    // Circle 2: 5s (rest between) + 30s (work)
+    // Total: 70s
+    expect(duration).toBe(70);
+  });
+
+  it('calculates duration for two-sided exercise with multiple circles', () => {
+    const exerciseId = 'exercise-1';
+    const exercise = makeExercise(exerciseId, true);
+    const workout = makeWorkout([makeWorkBlock('Lunges', 30, exerciseId)], 2, 5);
+
+    const duration = calculateWorkoutDuration(workout, [exercise]);
+
+    // Circle 1: 5s (prepare) + 30s (side 1) + 10s (switch) + 30s (side 2)
+    // Circle 2: 5s (rest between) + 30s (side 1) + 10s (switch) + 30s (side 2)
+    // Total: 150s
+    expect(duration).toBe(150);
   });
 });
