@@ -1,5 +1,5 @@
 import { ArrowLeft, GripVertical, Trash2, Plus, Settings2, Check, X } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getWorkout, saveWorkout } from "@/db/workouts";
 import { getSettings, updateDefaultRestTitle } from "@/db/settings";
 import { getAllExercises } from "@/db/exercises";
@@ -159,6 +159,16 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
     })
   );
 
+  const scrollToBottom = useCallback(() => {
+    // Delay to ensure React has rendered the new element
+    setTimeout(() => {
+      const container = document.querySelector('[data-scroll-container]') as HTMLElement;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 150);
+  }, []);
+
   useEffect(() => {
     loadWorkout();
     loadSettings();
@@ -260,15 +270,24 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
 
   const handleAddBlock = (type: "work" | "rest") => {
     if (!workout) return;
-    const newBlock: Block = {
+    const newBlock: WorkBlock | RestBlock = {
       id: crypto.randomUUID(),
       type,
       title: type === 'work' ? 'Work' : defaultRestTitle,
-      duration: 30
+      duration: type === 'work' ? 30 : 10
     };
     const updated = { ...workout, blocks: [...workout.blocks, newBlock], updatedAt: Date.now() };
     setWorkout(updated);
     handleSaveWorkout(updated);
+    scrollToBottom();
+
+    // Auto-open edit dialog for work blocks
+    if (type === 'work') {
+      setEditingBlock({ ...newBlock });
+      setDurationInput(newBlock.duration.toString());
+      setEditingSectionParentId(null);
+      setEditBlockDialogOpen(true);
+    }
   };
 
   const handleDeleteBlock = (blockId: string) => {
@@ -507,6 +526,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
     const updated = { ...workout, blocks: [...workout.blocks, newSection], updatedAt: Date.now() };
     setWorkout(updated);
     handleSaveWorkout(updated);
+    scrollToBottom();
   };
 
   const handleEditSection = (sectionId: string) => {
@@ -556,7 +576,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       id: crypto.randomUUID(),
       type: blockType,
       title: blockType === 'work' ? 'Work' : defaultRestTitle,
-      duration: 30
+      duration: blockType === 'work' ? 30 : 10
     };
 
     const updatedBlocks = workout.blocks.map(block => {
@@ -570,6 +590,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
     const updated = { ...workout, blocks: updatedBlocks, updatedAt: Date.now() };
     setWorkout(updated);
     handleSaveWorkout(updated);
+    scrollToBottom();
   };
 
   const handleEditBlockInSection = (sectionId: string, blockId: string) => {
@@ -643,7 +664,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col no-select">
+    <div className="h-screen overflow-hidden bg-background flex flex-col no-select">
       {/* Header */}
       <header className="safe-top px-4 pt-4 pb-3 flex items-center gap-3 border-b border-border/50">
         <button
@@ -686,7 +707,7 @@ const WorkoutEditor = ({ workoutId, onNavigate }: WorkoutEditorProps) => {
       </div>
 
       {/* Block List */}
-      <main className="flex-1 px-4 py-4 pb-32 overflow-y-auto">
+      <main data-scroll-container className="flex-1 px-4 py-4 pb-44 overflow-y-auto">
         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Intervals</p>
 
         {workout.blocks.length === 0 ? (

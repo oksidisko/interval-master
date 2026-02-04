@@ -107,6 +107,9 @@ This ensures timer accuracy (<100ms drift over 60 minutes) even when app is back
 **Main Components**:
 - `HomeScreen.tsx`: Workout list with create/edit/delete/start actions
 - `WorkoutEditor.tsx`: Edit workout details with drag-and-drop block reordering (via `@dnd-kit`)
+  - Auto-scrolls to bottom when adding new blocks
+  - Auto-opens edit dialog when adding Work blocks (saves extra tap)
+  - Default durations: Work 30s, Rest 10s
 - `TrainingPlayer.tsx`: Timer UI with play/pause/skip controls, dynamic color-coded backgrounds
 
 **UI Components**: `src/components/ui/` contains shadcn-ui components (Radix UI + Tailwind)
