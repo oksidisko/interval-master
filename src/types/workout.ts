@@ -3,6 +3,7 @@ export interface WorkBlock {
   type: 'work';
   title: string;
   duration: number; // seconds
+  exerciseId?: string; // optional link to library exercise
 }
 
 export interface RestBlock {
