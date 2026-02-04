@@ -1,21 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { X, SkipBack, Play, Pause, SkipForward, ChevronLeft, ChevronRight } from "lucide-react";
 import { getWorkout } from "@/db/workouts";
-import type { Workout, Block, SectionBlock } from "@/types/workout";
+import { getAllExercises } from "@/db/exercises";
+import type { Workout } from "@/types/workout";
 import { VisibilityManager } from "@/utils/visibilityManager";
 import { vibrateTransition } from "@/utils/hapticFeedback";
 import { AudioManager } from "@/utils/audioManager";
-import { isSectionBlock } from "@/utils/blockTypeGuards";
+import { compileWorkout, ExecutionBlock } from "@/utils/compileWorkout";
 import WorkoutCompletionOverlay from "./WorkoutCompletionOverlay";
-
-type IntervalType = "prepare" | "work" | "rest";
-
-interface ExecutionBlock {
-  type: IntervalType;
-  title: string;
-  duration: number;
-  circle: number;
-}
 
 interface TrainingPlayerProps {
   workoutId: string;
@@ -56,87 +48,18 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
       const data = await getWorkout(workoutId);
       if (data) {
         setWorkout(data);
-        const sequence = buildExecutionSequence(data);
-        setExecutionSequence(sequence);
-        setTimeRemaining(sequence[0]?.duration || 0);
+
+        // Load exercises and compile workout
+        const exercises = await getAllExercises();
+        const compiled = compileWorkout(data, exercises);
+        setExecutionSequence(compiled.blocks);
+        setTimeRemaining(compiled.blocks[0]?.duration || 0);
       }
     } catch (error) {
       console.error('Failed to load workout:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const expandSection = (
-    sequence: ExecutionBlock[],
-    section: SectionBlock,
-    currentCircle: number
-  ): void => {
-    for (let loop = 1; loop <= section.loops; loop++) {
-      // Add preparation before each section loop
-      if (section.preparationTime > 0) {
-        sequence.push({
-          type: 'prepare',
-          title: `${section.title} - Get Ready`,
-          duration: section.preparationTime,
-          circle: currentCircle
-        });
-      }
-
-      // Add all child blocks (NO prefix per user preference)
-      for (const childBlock of section.blocks) {
-        // childBlock is WorkBlock | RestBlock (never SectionBlock due to type definition)
-        sequence.push({
-          type: childBlock.type as 'work' | 'rest',
-          title: childBlock.title,
-          duration: childBlock.duration,
-          circle: currentCircle
-        });
-      }
-    }
-  };
-
-  const buildExecutionSequence = (workout: Workout): ExecutionBlock[] => {
-    const sequence: ExecutionBlock[] = [];
-
-    for (let circle = 1; circle <= workout.circles; circle++) {
-      // Initial preparation
-      if (circle === 1) {
-        sequence.push({
-          type: 'prepare',
-          title: 'Get Ready',
-          duration: workout.systemRestSec,
-          circle: 1
-        });
-      }
-
-      // Process each block
-      for (const block of workout.blocks) {
-        if (isSectionBlock(block)) {
-          expandSection(sequence, block, circle);
-        } else {
-          // Existing basic block handling
-          sequence.push({
-            type: block.type,
-            title: block.title,
-            duration: block.duration,
-            circle
-          });
-        }
-      }
-
-      // Rest between rounds
-      if (circle < workout.circles) {
-        sequence.push({
-          type: 'prepare',
-          title: 'Rest Between Rounds',
-          duration: workout.systemRestSec,
-          circle: circle + 1
-        });
-      }
-    }
-
-    return sequence;
   };
 
   const currentBlock = executionSequence[currentBlockIndex];
