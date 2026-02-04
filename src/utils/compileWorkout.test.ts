@@ -69,6 +69,19 @@ describe('compileWorkout', () => {
     expect(result.blocks[2]).toMatchObject({ type: 'work', title: 'Side Plank (other side)', duration: 30 });
   });
 
+  it('uses Russian text for two-sided exercises with Cyrillic titles', () => {
+    const exercise = makeExercise('Боковая планка', true);
+    const workBlock = makeWorkBlock('Боковая планка', 30, exercise.id);
+    const workout = makeWorkout([workBlock], 1, 0);
+
+    const result = compileWorkout(workout, [exercise]);
+
+    expect(result.blocks).toHaveLength(3);
+    expect(result.blocks[0]).toMatchObject({ type: 'work', title: 'Боковая планка', duration: 30 });
+    expect(result.blocks[1]).toMatchObject({ type: 'rest', title: 'Смена стороны', duration: 10 });
+    expect(result.blocks[2]).toMatchObject({ type: 'work', title: 'Боковая планка (другая сторона)', duration: 30 });
+  });
+
   it('does not expand non-two-sided exercise', () => {
     const exercise = makeExercise('Push-ups', false);
     const workBlock = makeWorkBlock('Push-ups', 30, exercise.id);

@@ -18,6 +18,13 @@ export interface CompiledWorkout {
 
 const TWO_SIDED_REST_DURATION = 10; // seconds between sides
 
+/**
+ * Detect if text contains Cyrillic characters (Russian)
+ */
+function isRussian(text: string): boolean {
+  return /[а-яА-ЯёЁ]/.test(text);
+}
+
 export function compileWorkout(
   workout: Workout,
   exercises: Exercise[]
@@ -33,6 +40,10 @@ export function compileWorkout(
     const exercise = block.exerciseId ? exerciseMap.get(block.exerciseId) : undefined;
 
     if (exercise?.isTwoSided) {
+      const russian = isRussian(block.title);
+      const switchSidesText = russian ? 'Смена стороны' : 'Switch sides';
+      const otherSideText = russian ? 'другая сторона' : 'other side';
+
       // First side
       sequence.push({
         type: 'work',
@@ -44,7 +55,7 @@ export function compileWorkout(
       // Rest between sides
       sequence.push({
         type: 'rest',
-        title: 'Switch sides',
+        title: switchSidesText,
         duration: TWO_SIDED_REST_DURATION,
         circle,
       });
@@ -52,7 +63,7 @@ export function compileWorkout(
       // Second side
       sequence.push({
         type: 'work',
-        title: `${block.title} (other side)`,
+        title: `${block.title} (${otherSideText})`,
         duration: block.duration,
         circle,
       });
