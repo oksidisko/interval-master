@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { X, SkipBack, Play, Pause, SkipForward, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, SkipBack, Play, Pause, SkipForward } from "lucide-react";
 import { getWorkout } from "@/db/workouts";
 import { getAllExercises } from "@/db/exercises";
 import type { Workout } from "@/types/workout";
 import { VisibilityManager } from "@/utils/visibilityManager";
 import { vibrateTransition } from "@/utils/hapticFeedback";
 import { AudioManager } from "@/utils/audioManager";
+import { WakeLockManager } from "@/utils/wakeLockManager";
 import { compileWorkout, ExecutionBlock } from "@/utils/compileWorkout";
 import WorkoutCompletionOverlay from "./WorkoutCompletionOverlay";
 
@@ -27,6 +28,7 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
   const rafIdRef = useRef<number | null>(null);
   const visibilityManagerRef = useRef<VisibilityManager | null>(null);
   const audioManagerRef = useRef<AudioManager>(new AudioManager());
+  const wakeLockManagerRef = useRef<WakeLockManager>(new WakeLockManager());
   const lastBeepSecondRef = useRef<number | null>(null);
   const lastAnnouncementSecondRef = useRef<number | null>(null);
   const completionDurationRef = useRef<number>(0);
@@ -35,11 +37,12 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
     loadWorkout();
   }, [workoutId]);
 
-  // Cleanup audio manager on unmount
+  // Cleanup audio and wake lock managers on unmount
   useEffect(() => {
     return () => {
       audioManagerRef.current.cancelSpeech();
       audioManagerRef.current.cleanup();
+      wakeLockManagerRef.current.cleanup();
     };
   }, []);
 
@@ -166,6 +169,9 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
           setTimeRemaining(0);
           startTimeRef.current = null;
 
+          // Release wake lock when workout completes
+          wakeLockManagerRef.current.release();
+
           // Calculate total workout duration
           const totalSeconds = executionSequence.reduce((sum, block) => sum + block.duration, 0);
           completionDurationRef.current = totalSeconds;
@@ -277,29 +283,9 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
         </p>
       </main>
 
-      {/* State Navigation */}
-      <div className={`mx-4 mb-4 flex items-center justify-between ${getTextColor()}`}>
-        <button
-          onClick={goToPrev}
-          disabled={currentBlockIndex === 0}
-          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform disabled:opacity-30"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="font-semibold">Prev</span>
-        </button>
-
-        <div className="text-sm font-medium">
-          {currentBlockIndex + 1} / {executionSequence.length}
-        </div>
-
-        <button
-          onClick={goToNext}
-          disabled={currentBlockIndex === executionSequence.length - 1}
-          className="flex items-center gap-1 px-4 py-3 rounded-xl bg-black/20 active:scale-95 transition-transform disabled:opacity-30"
-        >
-          <span className="font-semibold">Next</span>
-          <ChevronRight className="w-5 h-5" />
-        </button>
+      {/* Block Counter */}
+      <div className={`mx-4 mb-4 text-center text-sm font-medium ${getTextColor()}`}>
+        {currentBlockIndex + 1} / {executionSequence.length}
       </div>
 
       {/* Bottom Controls */}
@@ -318,9 +304,13 @@ const TrainingPlayer = ({ workoutId, onNavigate }: TrainingPlayerProps) => {
               if (!isPlaying) {
                 // Initialize audio on first play (user gesture required)
                 await audioManagerRef.current.initialize();
+                // Request wake lock to prevent device sleep during workout
+                await wakeLockManagerRef.current.request();
               } else {
                 // Cancel any ongoing speech when pausing
                 audioManagerRef.current.cancelSpeech();
+                // Release wake lock when paused
+                await wakeLockManagerRef.current.release();
               }
               setIsPlaying(!isPlaying);
             }}
