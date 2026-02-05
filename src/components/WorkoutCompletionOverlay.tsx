@@ -21,7 +21,7 @@ const WorkoutCompletionOverlay = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center glass animate-in fade-in duration-300">
-      <div className="w-full max-w-md mx-4 bg-card rounded-3xl p-8 animate-in slide-in-from-bottom-4 duration-500">
+      <div className="w-full max-w-md mx-4 bg-card text-card-foreground rounded-3xl p-8 animate-in slide-in-from-bottom-4 duration-500">
         {/* Success Icon */}
         <div className="flex justify-center mb-6">
           <div className="w-20 h-20 rounded-full bg-rest flex items-center justify-center">
